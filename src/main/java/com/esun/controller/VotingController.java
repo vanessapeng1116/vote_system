@@ -2,6 +2,7 @@ package com.esun.controller;
 
 import com.esun.model.VotingItem;
 import com.esun.service.VotingService;
+import com.esun.utils.SecurityUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,7 +33,10 @@ public class VotingController {
         if (itemName == null || itemName.trim().isEmpty()) {
             return ResponseEntity.badRequest().body("項目名稱不能是空的");
         }
-
+        if(!SecurityUtil.isValidInput((itemName))){
+            return  ResponseEntity.badRequest().body("名稱只能是中文英文還有數字");
+        }
+        String safeItemName=SecurityUtil.sanitize(itemName);
         voteService.addItem(itemName);
         return ResponseEntity.ok("success");
     }
@@ -50,6 +54,9 @@ public class VotingController {
                                          @RequestParam("itemIds") List<Integer> itemIds) {
         if (voterName == null || voterName.trim().isEmpty() || itemIds == null || itemIds.isEmpty()) {
             return ResponseEntity.badRequest().body("欄位不完整");
+        }
+        if(!SecurityUtil.isValidInput(voterName)){
+            return ResponseEntity.badRequest().body("投票人的名字只能是中文英文或數字");
         }
 
         try {
