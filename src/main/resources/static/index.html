@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>投票系統</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 40px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: #5b907d; margin-bottom: 30px; }
+        .section { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px dashed #ddd; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { background-color: #00a86b; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        .btn:hover { background-color: #008f5a; }
+        .btn-danger { background-color: #e74c3c; }
+        .btn-danger:hover { background-color: #c0392b; }
+        .item-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .item-info { display: flex; align-items: center; gap: 10px; }
+        .vote-count { color: #666; font-size: 14px; margin-left: 10px; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>🗳️投票系統</h1>
+
+    <div class="section">
+        <h3>➕ 新增項目</h3>
+        <div class="form-group" style="display: flex; gap: 10px;">
+            <input type="text" id="new-item-name" placeholder="輸入項目名稱">
+            <button class="btn" onclick="addItem()">新增</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>參與投票</h3>
+        <div class="form-group">
+            <label for="voter-name">名字：</label>
+            <input type="text" id="voter-name" placeholder="輸入名字">
+        </div>
+        
+        <label>選擇你想投的項目：</label>
+        <div id="voting-items-container">載入中...</div>
+        
+        <button class="btn" style="width: 100%; margin-top: 15px; font-size: 16px;" onclick="submitVotes()">送出投票</button>
+    </div>
+
+    <div style="max-width: 600px; margin: 30px auto;">
+        <canvas id="votingChart"></canvas>
+    </div>
+</div>
+<script>
+    const API_BASE = '/api';
+    let myChart = null;
+
+//  查詢列表）
+function loadItems() {
+    fetch(`${API_BASE}/items`) 
+        .then(res => res.json())
+        .then(data => {
+            const container = document.getElementById('voting-items-container');
+            container.innerHTML = '';
+            
+            if(data.length === 0) {
+                container.innerHTML = '<p style="color:#999;">目前沒有任何項目。</p>';
+                if(myChart !== null) {
+                    myChart.data.labels = [];
+                    myChart.data.datasets[0].data = [];
+                    myChart.update();
+                }
+                return;
+            }
+            
+            const itemNames = [];
+            const voteCounts = [];
+
+            data.forEach(item => {
+                itemNames.push(item.name);
+                voteCounts.push(item.voteCount);
+                
+                const row = document.createElement('div');
+                row.className = 'item-row';
+                row.innerHTML = `
+                    <div class="item-info">
+                        <input type="checkbox" name="vote-item" value="${item.id}" id="item-${item.id}">
+                        <label for="item-${item.id}" style="display:inline; font-weight:normal;">
+                            <strong>${item.name}</strong>
+                        </label>
+                        <span class="vote-count">(${item.voteCount} 票)</span>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteItem(${item.id})">刪除</button>
+                `;
+                container.appendChild(row);
+            });
+            
+            updateChart(itemNames, voteCounts);
+        })
+        .catch(err => console.error('載入失敗:', err));
+}
+
+// 長條圖
+function updateChart(labels, dataValues){
+    const ctx = document.getElementById('votingChart').getContext('2d');
+    
+    if(myChart !== null){
+        myChart.data.labels = labels;
+        myChart.data.datasets[0].data = dataValues;
+        myChart.update();
+    } else {
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '目前累積票數',
+                    data: dataValues,
+                    backgroundColor: [
+                        'rgba(54, 162, 235, 0.6)', 
+                        'rgba(255, 99, 132, 0.6)',   
+                        'rgba(255, 206, 86, 0.6)',  
+                        'rgba(75, 192, 192, 0.6)',   
+                        'rgba(153, 102, 255, 0.6)'  
+                    ],
+                    borderColor: [
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(255, 206, 86, 1)',
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(153, 102, 255, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// 新增項目 
+function addItem() {
+    const input = document.getElementById('new-item-name');
+    let name = input.value.trim();
+    if (!name) return alert('請輸入項目名稱！');
+
+    name = name.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const params = new URLSearchParams();
+    params.append('itemName', name); 
+
+    
+    fetch(`${API_BASE}/addItem`, { method: 'POST', body: params })
+    .then(res => res.text())
+    .then(text => {
+        if (text === "success") { 
+            input.value = '';
+            loadItems(); 
+        } else {
+            alert('新增失敗：' + text);
+        }
+    })
+    .catch(err => alert('系統連線失敗'));
+}
+
+//刪除項目
+function deleteItem(id) {
+    if (!confirm('確定要刪除嗎？')) return;
+
+   
+    fetch(`${API_BASE}/deleteItem/${id}`, { method: 'DELETE' })
+    .then(res => res.text())
+    .then(text => {
+        if (text === "delete success") { 
+            loadItems();
+        } else {
+            alert('刪除失敗');
+        }
+    })
+    .catch(err => alert('系統連線失敗'));
+}
+
+// 送出投票
+function submitVotes() {
+    let voterName = document.getElementById('voter-name').value.trim();
+    if (!voterName) return alert('請先輸入你的名字！');
+
+    voterName = voterName.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    const checkboxes = document.querySelectorAll('input[name="vote-item"]:checked');
+    if (checkboxes.length === 0) return alert('請至少勾選一個項目投票！');
+
+    const params = new URLSearchParams();
+    params.append('voterName', voterName);
+    checkboxes.forEach(cb => {
+        params.append('itemIds', cb.value);
+    });
+
+   
+    fetch(`${API_BASE}/submitVote`, { method: 'POST', body: params })
+    .then(res => res.text())
+    .then(text => {
+        if (text === "vote success") { 
+            alert('投票成功！');
+            document.getElementById('voter-name').value = '';
+            loadItems(); 
+        } else {
+            alert('投票失敗：' + text);
+        }
+    })
+    .catch(err => alert('系統連線失敗'));
+}
+
+// 初始化網頁資料
+loadItems();
+</script>
+</body>
+</html>
